@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محول روابط Google Sheets إلى QR Codes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4285F4;
+            --secondary-color: #34A853;
+            --accent-color: #EA4335;
+            --light-bg: #f8f9fa;
+            --dark-text: #202124;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+            padding-bottom: 50px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 2.2rem;
+        }
+        
+        .description {
+            font-size: 1.1rem;
+            margin: 15px 0;
+        }
+        
+        .input-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 16px;
+            margin-bottom: 15px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        
+        .button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 5px;
+        }
+        
+        .button:hover {
+            background-color: #3367d6;
+        }
+        
+        .button-secondary {
+            background-color: var(--secondary-color);
+        }
+        
+        .button-secondary:hover {
+            background-color: #2d9249;
+        }
+        
+        .results-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .qr-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        
+        .qr-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .qr-code {
+            margin: 0 auto 15px;
+            display: flex;
+            justify-content: center;
+        }
+        
+        .qr-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            word-break: break-all;
+            font-size: 0.9rem;
+        }
+        
+        .actions {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background-color: var(--secondary-color);
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+        
+        .notification.show {
+            opacity: 1;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .results-section {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>محول روابط Google Sheets إلى QR Codes</h1>
+            <p class="description">قم بتحويل مجموعة من روابط جداول Google Sheets إلى رموز QR دفعة واحدة</p>
+        </header>
+        
+        <div class="input-section">
+            <h2>أدخل روابط Google Sheets</h2>
+            <p>ضع كل رابط في سطر منفصل</p>
+            <textarea id="linksInput" placeholder="https://docs.google.com/spreadsheets/d/1abc123...
+https://docs.google.com/spreadsheets/d/2def456...
+https://docs.google.com/spreadsheets/d/3ghi789..."></textarea>
+            
+            <button id="generateBtn" class="button">إنشاء رموز QR</button>
+            <button id="downloadAllBtn" class="button button-secondary" disabled>تنزيل جميع الرموز (ZIP)</button>
+            <button id="clearBtn" class="button" style="background-color: #EA4335;">مسح الكل</button>
+        </div>
+        
+        <div id="resultsContainer" class="results-section"></div>
+        
+        <div class="actions">
+            <button id="backToTopBtn" class="button" style="display: none;">العودة إلى الأعلى</button>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <footer>
+        <p>تم التطوير باستخدام HTML5 وCSS3 وJavaScript. يعمل هذا الموقع بدون اتصال بعد التحميل الأولي.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const linksInput = document.getElementById('linksInput');
+            const generateBtn = document.getElementById('generateBtn');
+            const downloadAllBtn = document.getElementById('downloadAllBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const backToTopBtn = document.getElementById('backToTopBtn');
+            const notification = document.getElementById('notification');
+            
+            let qrCodes = [];
+            
+            // عرض الإشعارات
+            function showNotification(message, isSuccess = true) {
+                notification.textContent = message;
+                notification.style.backgroundColor = isSuccess ? '#34A853' : '#EA4335';
+                notification.classList.add('show');
+                
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 3000);
+            }
+            
+            // إنشاء QR Code
+            function generateQRCode(link, container) {
+                // تنظيف الرابط للتأكد من أنه صحيح
+                let cleanLink = link.trim();
+                if (!cleanLink.startsWith('http')) {
+                    cleanLink = 'https://' + cleanLink;
+                }
+                
+                // استخراج معرف الجدول للاستخدام كاسم ملف
+                const match = cleanLink.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                const docId = match ? match[1].substring(0, 8) : 'sheet';
+                
+                const qrCard = document.createElement('div');
+                qrCard.className = 'qr-card';
+                
+                const title = document.createElement('div');
+                title.className = 'qr-title';
+                title.textContent = cleanLink.length > 50 ? cleanLink.substring(0, 50) + '...' : cleanLink;
+                title.title = cleanLink;
+                
+                const qrContainer = document.createElement('div');
+                qrContainer.className = 'qr-code';
+                qrContainer.id = `qr-${docId}`;
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'button';
+                downloadBtn.textContent = 'تنزيل QR Code';
+                downloadBtn.onclick = function() {
+                    const canvas = qrContainer.querySelector('canvas');
+                    if (canvas) {
+                        const link = document.createElement('a');
+                        link.download = `qrcode-${docId}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                    }
+                };
+                
+                qrCard.appendChild(title);
+                qrCard.appendChild(qrContainer);
+                qrCard.appendChild(downloadBtn);
+                container.appendChild(qrCard);
+                
+                // إنشاء QR Code
+                new QRCode(qrContainer, {
+                    text: cleanLink,
+                    width: 180,
+                    height: 180,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                
+                return { element: qrCard, link: cleanLink, docId: docId };
+            }
+            
+            // إنشاء جميع رموز QR
+            generateBtn.addEventListener('click', function() {
+                const linksText = linksInput.value.trim();
+                if (!linksText) {
+                    showNotification('يرجى إدخال روابط أولاً', false);
+                    return;
+                }
+                
+                const links = linksText.split('\n').filter(link => link.trim() !== '');
+                if (links.length === 0) {
+                    showNotification('لم يتم العثور على روابط صالحة', false);
+                    return;
+                }
+                
+                // مسح النتائج السابقة
+                resultsContainer.innerHTML = '';
+                qrCodes = [];
+                
+                // إنشاء رموز QR جديدة
+                links.forEach(link => {
+                    if (link.trim() !== '') {
+                        const qrData = generateQRCode(link, resultsContainer);
+                        qrCodes.push(qrData);
+                    }
+                });
+                
+                // تمكين زر التنزيل
+                downloadAllBtn.disabled = false;
+                
+                // إظهار زر العودة للأعلى إذا كانت النتائج كثيرة
+                if (links.length > 4) {
+                    backToTopBtn.style.display = 'block';
+                }
+                
+                showNotification(`تم إنشاء ${links.length} من رموز QR بنجاح`);
+            });
+            
+            // تنزيل جميع الرموز كملف ZIP
+            downloadAllBtn.addEventListener('click', function() {
+                if (qrCodes.length === 0) {
+                    showNotification('لا توجد رموز QR لتنزيلها', false);
+                    return;
+                }
+                
+                showNotification('جاري إنشاء ملف ZIP، قد يستغرق بعض الوقت...');
+                
+                const zip = new JSZip();
+                const promises = [];
+                
+                qrCodes.forEach(qr => {
+                    const canvas = qr.element.querySelector('canvas');
+                    if (canvas) {
+                        const promise = new Promise(resolve => {
+                            canvas.toBlob(blob => {
+                                zip.file(`qrcode-${qr.docId}.png`, blob);
+                                resolve();
+                            }, 'image/png');
+                        });
+                        promises.push(promise);
+                    }
+                });
+                
+                Promise.all(promises).then(() => {
+                    zip.generateAsync({ type: 'blob' }).then(content => {
+                        saveAs(content, 'google-sheets-qrcodes.zip');
+                        showNotification('تم تنزيل ملف ZIP بنجاح');
+                    });
+                });
+            });
+            
+            // مسح الكل
+            clearBtn.addEventListener('click', function() {
+                linksInput.value = '';
+                resultsContainer.innerHTML = '';
+                qrCodes = [];
+                downloadAllBtn.disabled = true;
+                backToTopBtn.style.display = 'none';
+                showNotification('تم مسح جميع البيانات');
+            });
+            
+            // العودة إلى الأعلى
+            backToTopBtn.addEventListener('click', function() {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+            
+            // إظهار/إخفاء زر العودة للأعلى عند التمرير
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 500) {
+                    backToTopBtn.style.display = 'block';
+                } else {
+                    backToTopBtn.style.display = 'none';
+                }
+            });
+            
+            // مثال على الروابط لمساعدة المستخدم
+            const exampleLinks = [
+                'https://docs.google.com/spreadsheets/d/1oXip5xGI7yuQAWj3yBig1OT8_PptxXCzlNp51cKZf3I',
+                'https://docs.google.com/spreadsheets/d/17c46O0gG8w2NDcGjeAZ_Et_Mb16_iHH28pQJ1FYimbk',
+                'https://docs.google.com/spreadsheets/d/1AF5deeiziwPpUmSqKe2TG7Ac5mKtm3f1MVO-DhXuGj0'
+            ].join('\n');
+            
+            linksInput.placeholder = exampleLinks;
+        });
+    </script>
+</body>
+</html>
